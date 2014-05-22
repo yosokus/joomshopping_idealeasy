@@ -1,5 +1,4 @@
-joomshopping_idealeasy
-======================
+#joomshopping_idealeasy
 
 Joomshopping 4.x iDEAL Easy payment plugin
 

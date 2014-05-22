@@ -1,13 +1,13 @@
 <?php
 /**
- * Joomshopping iDEAL Basic payment class
+ * Joomshopping iDEAL Easy payment class
  *
  * @package		JoomShopping
  * @subpackage	payment
- * @author		Yos
- * @copyright	Copyright (C) 2013-2014 Yos. All rights reserved.
+ * @author		Yos Okusanya
+ * @copyright	Copyright (C) 2013-2014 Yos Okusanya. All rights reserved.
  * @license		GNU General Public License version 2 or later.
-*/
+ */
 
 defined('_JEXEC') or die('Restricted access');
 
@@ -15,244 +15,236 @@ class pm_idealeasy extends PaymentRoot
 {
     /**
      * Display payment plugin parameters in admin interface
-	 *
-     * @param array $pluginConfig - payment plugin config
-    */
-	function showAdminFormParams($pluginConfig)
-	{
-		// load language file
-		$this->loadLanguageFile();
+     *
+     * @param array $pluginConfig   payment plugin config
+     */
+    function showAdminFormParams($pluginConfig)
+    {
+        $this->loadLanguageFile();
 
-		//initialize some variables
-		if (!isset($pluginConfig['test_mode'])) { $pluginConfig['test_mode'] = 1; }
-		if (!isset($pluginConfig['send_user_info'])) { $pluginConfig['send_user_info'] = 0; }
-		if (!isset($pluginConfig['transaction_end_status'])) { $pluginConfig['transaction_end_status'] = 6; }
-		if (!isset($pluginConfig['transaction_failed_status'])) { $pluginConfig['transaction_failed_status'] = 1; }
-
-		$orders = JModelLegacy::getInstance('orders', 'JshoppingModel'); //admin model
-		$order_status = $orders->getAllOrderStatus();
-
-		include(dirname(__FILE__)."/adminparamsform.php");
-	}
-
-    /**
-     * show form payment. Checkout Step3
-     * @param array $params - entered params
-     * @param array $pluginConfig - payment plugin config
-    */
-    function showPaymentForm($params, $pluginConfig)
-	{
-        include(dirname(__FILE__)."/paymentform.php");
+        include(__DIR__ . "/adminparamsform.php");
     }
 
     /**
-     * Start payment form. Checkout Step6.
-	 *
-     * @param array $pluginConfig - payment plugin config
-     * @param jshopOrder $order
-    */
-	function showEndForm($pluginConfig, $order)
-	{
-        $jshopConfig = JSFactory::getConfig();
+     * Shows the form payment. Checkout Step3
+     *
+     * @param array $params         entered params
+     * @param array $pluginConfig   payment plugin config
+     */
+    function showPaymentForm($params, $pluginConfig)
+    {
+        include(__DIR__ . "/paymentform.php");
+    }
 
-		$order_id = $order->order_id;
-		$order_number = $order->order_number;
-		$order_currency_code = $order->currency_code_iso;
-		$order_hash = $order->order_hash;
+    /**
+     * Creates the payment form and redirect to the payment page.
+     * Checkout Step6.
+     *
+     * @param array         $pluginConfig   payment plugin config
+     * @param JshopOrder    $order
+     */
+    function showEndForm($pluginConfig, $order)
+    {
+        $orderId = $order->order_id;
+        $orderNumber = $order->order_number;
+        $orderHash = $order->order_hash;
 
-		$order_total = round((float) $order->order_total, 2);
-		$order_total = $order_total * 100;
+        $orderTotal = round((float)$order->order_total, 2);
+        $orderTotal = $orderTotal * 100;
 
-		$merchant_id = $pluginConfig['merchant_id'];
+        $merchantId = $pluginConfig['merchant_id'];
+        $testMode = (int)$pluginConfig['test_mode'];
 
-		$test_mode = (int) $pluginConfig['test_mode'];
+        if ($testMode) {
+            $merchantId = 'TESTiDEALEASY';
+        }
 
-		if($test_mode)$merchant_id = "TESTiDEALEASY";
+        $postVariables = array(
+                                "PSPID" => $merchantId,	// merchant id
+                                "orderID" => $orderNumber, // reference id
+                                "amount" => $orderTotal, 	// order total
+                                "language" => 'NL_NL', 		// language (static field)
+                                "currency" => 'EUR', 		// order currency (static field)
+                                "PM" => 'iDEAL',			// (static field)
+                                "COM" => sprintf(_JSHOP_PAYMENT_NUMBER, $order->order_number) // order description
+                            );
 
-		$post_variables = array(
-								"PSPID" => $merchant_id,	// merchant id
-								"orderID" => $order_number, // reference id
-								"amount" => $order_total, 	// order total
-								"language" => 'NL_NL', 		// language (static field)
-								"currency" => 'EUR', 		// order currency (static field)
-								"PM" => 'iDEAL',			// (static field)
-								"COM" => sprintf(_JSHOP_PAYMENT_NUMBER, $order->order_number) // order description
-							);
+        $pmClass = 'pm_idealeasy';
+        $returnUrl = 'index.php?option=com_jshopping&controller=checkout&task=step7'
+            . '&js_paymentclass='. $pmClass . '&order_id=' . $orderId . '&hash=' . $orderHash;
 
-		$pm_class = 'pm_idealeasy';
+        // return urls
+        $successUrl = $returnUrl . "&act=return";
+        $cancelUrl = $returnUrl . "&act=cancel";
+        $errorUrl = $returnUrl . "&act=error";
 
-        $return_url = "index.php?option=com_jshopping&controller=checkout&task=step7";
-		$return_url .= "&js_paymentclass={$pm_class}&order_id={$order_id}&hash={$order_hash}";
+        // sef urls
+        $successUrl = SEFLink($successUrl, 0, 1, -1);
+        $cancelUrl = SEFLink($cancelUrl, 0, 1, -1);
+        $errorUrl = SEFLink($errorUrl, 0, 1, -1);
 
-		// return urls
-		$url_cancel = $return_url . "&act=cancel";
-		$url_success = $return_url . "&act=return";
-		$url_error = $return_url . "&act=error";
+        $postVariables['accepturl'] = $successUrl;
+        $postVariables['cancelurl'] = $cancelUrl;
+        $postVariables['exceptionurl'] = $errorUrl;
+        $postVariables['declineurl'] = $errorUrl;
 
-		// sef urls
-		$url_success = SEFLink($url_success,0,1,-1);
-		$url_cancel = SEFLink($url_cancel,0,1,-1);
-		$url_error = SEFLink($url_error,0,1,-1);
+        if ((int)$pluginConfig['send_user_info']) {
+            $customerName = $order->f_name;
 
-		$post_variables['accepturl'] = $url_success;
-		$post_variables['cancelurl'] = $url_cancel;
-		$post_variables['exceptionurl'] = $url_error;
-		$post_variables['declineurl'] = $url_error;
+            if ($order->m_name) {
+                $customerName .= ' ' . $order->m_name;
+            }
+            if ($order->l_name) {
+                $customerName .=  ' ' . $order->l_name;
+            }
 
-		if ((int) $pluginConfig['send_user_info'])
-		{
-			$customer_name = $order->f_name;
-			if ($order->m_name) $customer_name .= ' ' . $order->m_name;
-			if ($order->l_name) $customer_name .=  ' ' . $order->l_name;
+            $postVariables["CN"] = $this->escapeHtml($customerName);
+            $postVariables["EMAIL"] = $this->escapeHtml($order->email);
 
-			$post_variables["CN"] = $this->escapeHtml($customer_name);
-			$post_variables["EMAIL"] = $this->escapeHtml($order->email);
+            $address = array();
+            if ($order->home) {
+                $address[] = $order->home;
+            }
+            if ($order->apartment) {
+                $address[] = $order->apartment;
+            }
+            if ($order->street) {
+                $address[] = $order->street;
+            }
 
-			$address = array();
-			if ($order->home) $address[] = $order->home;
-			if ($order->apartment) $address[] = $order->apartment;
-			if ($order->street) $address[] = $order->street;
+            if (!empty($address)) {
+                $ownerAddress = implode( ', ', $address);
 
-			if (!empty($address))
-			{
-				$owner_address = implode( ', ', $address);
+                $postVariables["owneraddress"] = $this->escapeHtml($ownerAddress);
+                $postVariables["ownertown"] = $this->escapeHtml($order->city);
+                $postVariables["ownerzip"] = $this->escapeHtml($order->zip);
 
-				$post_variables["owneraddress"] = $this->escapeHtml($owner_address);
-				$post_variables["ownertown"] = $this->escapeHtml($order->city);
-				$post_variables["ownerzip"] = $this->escapeHtml($order->zip);
+                $countryId = (int) $order->d_country;
 
-				$country_id = (int) $order->d_country;
+                if ($countryId) {
+                    $country = JTable::getInstance('country', 'jshop');
+                    $country->load($countryId);
 
-				if ($country_id)
-				{
-					$country = JTable::getInstance('country', 'jshop');
-					$country->load($country_id);
-
-					$country_name = $country->get('name_en-GB');
-					$post_variables["ownercty"] = $this->escapeHtml($country_name);
-				}
-
-			}
-		}
+                    $countryName = $country->get('name_en-GB');
+                    if ($countryName) {
+                        $postVariables["ownercty"] = $this->escapeHtml($countryName);
+                    }
+                }
+            }
+        }
 
 ?>
 
 <html>
-	<head>
-		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
-	</head>
-	<body>
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    </head>
+    <body>
 
-		<form id="paymentform" action="https://internetkassa.abnamro.nl/ncol/prod/orderstandard.asp" method="post" name="paymentform" >
-		<?php
+        <form name="paymentform" id="paymentform" action="https://internetkassa.abnamro.nl/ncol/prod/orderstandard.asp" method="post" >
+        <?php
 
-		$log_comment = "Order ID:{$order_id} | Order Total:{$order->order_total}";
+        $logComment = "Order ID:{$orderId} | Order Total:{$order->order_total}";
 
-		if ($test_mode)
-		{
-			$log_comment = "Test Mode | " . $log_comment;
-		}
+        if ($testMode) {
+            $logComment = "Test Mode | " . $logComment;
+        }
 
-		foreach ($post_variables as $name => $value)
-		{
-			echo "\n".'<input type="hidden" name="' . $name . '" value="' . $value . '" />';
+        foreach ($postVariables as $name => $value) {
+            echo "\n".'<input type="hidden" name="' . $name . '" value="' . $value . '" />';
+            $logComment .= "\n{$name}={$value}";	// log parameter
+        }
 
-			$log_comment .= "\n{$name}={$value}";	// log parameter
-		}
+        //log transaction
+        saveToLog("paymentdata.log", $logComment);
 
-		//log transaction
-		saveToLog("paymentdata.log", $log_comment); // joomshopping log function
+        ?>
+        </form>
 
-		?>
-		</form>
-
-		<script type="text/javascript">document.getElementById("paymentform").submit();</script>
-
-
-	</body>
+        <script type="text/javascript">
+            document.getElementById('paymentform').submit();
+        </script>
+    </body>
 </html>
 <?php
-		die();
-	}
-
-    /**
-     * get url parameters for payment. Step7
-	 *
-     * @param array $pluginConfig - Payment plugin config
-	 *
-	 * @return array
-    */
-    function getUrlParams($pluginConfig)
-	{
-		$app = JFactory::getApplication();
-		$input = $app->input;
-
-		$params = array();
-		$params['order_id'] = $input->getInt('order_id','');
-		$params['hash'] = $input->getVar('hash','');
-        $params['checkHash'] = 1;
-		$params['checkReturnParams'] = 1;
-
-		return $params;
+        die();
     }
 
     /**
-     * Check Transaction
-	 *
-     * @param array $pluginConfig - Payment plugin config
-     * @param jshopOrder $order - Jshop order
-     * @param string $act - jshop task
-	 *
-	 * @return array (jshop_status_code, comment)
-    */
-	function checkTransaction($pluginConfig, $order, $act)
-	{
-        // load language file
-		$this->loadLanguageFile();
+     * Returns the payment options from the url. Step7
+     *
+     * @param array $pluginConfig
+     *
+     * @return array
+     */
+    function getUrlParams($pluginConfig)
+    {
+        $input = JFactory::getApplication()->input;
 
-		$jshopConfig = JSFactory::getConfig();
+        $params = array();
+        $params['order_id'] = $input->getInt('order_id','');
+        $params['hash'] = $input->getVar('hash','');
+        $params['checkHash'] = 1;
+        $params['checkReturnParams'] = 1;
 
-		$app = JFactory::getApplication();
-		$input = $app->input;
-
-		// joomshopping status codes
-		// 1=>transaction_end_status, 3=>transaction_failed_status, 4=>transaction_cancel_status
-
-		if($act == 'return')
-		{
-			return array(1, "Order ID {$order->order_id} transaction complete"); //success - log transaction
-		}
-
-		return array(3, _JSHOPPING_IDEALEASY_ERROR_PROCESSING_PAYMENT); //error - log transaction and raise warning
-	}
+        return $params;
+    }
 
     /**
-     * Escape HTML string
-	 *
-     * @param string
-    */
-	function escapeHtml($string)
-	{
-		return htmlspecialchars($string,ENT_QUOTES);
-	}
+     * Returns the joomshopping transaction status code.
+     *
+     * joomshopping status codes
+     * 1 => transaction_end_status
+     * 3 => transaction_failed_status
+     * 4 => transaction_cancel_status
+     *
+     * @param array         $pluginConfig
+     * @param JshopOrder    $order
+     * @param string        $act           joomshopping controller action
+     *
+     * @return array (jshop_status_code, comment)
+     */
+    function checkTransaction($pluginConfig, $order, $act)
+    {
+        $this->loadLanguageFile();
+
+        if ('return' == $act) {
+            // return success code and log transaction
+            return array(1, "Order ID {$order->order_id} transaction complete");
+        } elseif ('cancel' == $act) {
+            // return cancel code and log transaction
+            return array(4, "Order ID {$order->order_id} transaction canceled");
+        }
+
+        // return error code, log transaction and raise warning
+        return array(3, _JSHOPPING_IDEALEASY_ERROR_PROCESSING_PAYMENT);
+    }
+
+    /**
+     * Escapes a HTML string
+     *
+     * @param string $html
+     *
+     * @return string
+     */
+    function escapeHtml($html)
+    {
+        return htmlspecialchars($html, ENT_QUOTES);
+    }
 
     /**
      * Load language file
     */
-	function loadLanguageFile()
+    function loadLanguageFile()
     {
-        $lang_dir  = dirname(__FILE__) . '/lang/';
-        $lang_file = $lang_dir . JFactory::getLanguage()->getTag() . '.php';
+        $langDir  = __DIR__ . '/lang/';
+        $langFile = $langDir . JFactory::getLanguage()->getTag() . '.php';
 
-		if (file_exists($lang_file))
-		{
-			require_once $lang_file;
-		}
-		else
-		{
-			require_once $lang_dir . 'en-GB.php';	//load default language
-		}
+        if (file_exists($langFile)) {
+            require_once $langFile;
+        } else {
+            require_once $langDir . 'en-GB.php';	//load default language
+        }
     }
-
 }
 ?>
